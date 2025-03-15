@@ -1,0 +1,7 @@
+Timestamp,Username,IP Address,Status,Message
+2025-03-13 09:45:22,john_doe,192.168.1.10,FAILED,Invalid password attempt
+2025-03-13 09:46:22,john_doe,192.168.1.10,FAILED,Invalid password attempt
+2025-03-13 09:47:22,john_doe,192.168.1.10,FAILED,Account locked after multiple failed attempts
+2025-03-13 09:50:00,admin,198.51.100.100,SUCCESS,Admin access granted
+2025-03-13 09:55:22,guest,192.168.1.50,FAILED,Unknown username
+2025-03-13 09:56:22,guest,192.168.1.50,FAILED,Unknown username
