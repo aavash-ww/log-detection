@@ -1,77 +1,107 @@
-const fs = require('fs');
-const csv = require('csv-parser');
+const express = require("express");
+const multer = require("multer");
+const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
+const csv = require("csv-parser");
 
-// Path to your CSV log file
-const logFile = 'login_log.csv';
+const app = express();
+app.use(cors());
 
-// data
-const failedAttemptsPerUser = {};
-const loginAttemptsPerIp = {};
-const successfulUsers = new Set();
-const alerts = [];
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "upload/");
+  },
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
+  },
+});
 
-//ip
-const knownAdminIps = new Set(['203.0.113.55']);
+const upload = multer({ storage });
 
-// Read and parse the CSV file
-fs.createReadStream(logFile)
-  .pipe(csv())
-  .on('data', (row) => {
-    const timestamp = row['Timestamp'];
-    const username = row['Username'];
-    const ip = row['IP Address'];
-    const status = row['Status'];
-    const message = row['Message'];
+// Upload
+app.post("/upload", upload.single("file"), (req, res) => {
+  console.log("File received:", req.file);
+  res.json({ message: "File uploaded successfully!" });
+});
 
-    // Count login attempts per IP
-    loginAttemptsPerIp[ip] = (loginAttemptsPerIp[ip] || 0) + 1;
+//port
+app.listen(8080, () => {
+  console.log(" Server running on port 8080");
+});
 
-    // Track successful logins
-    if (status === 'SUCCESS') {
-      successfulUsers.add(username);
+// path for logs to upload
+const UPLOADS_DIR = path.join(__dirname, "upload");
+const ALERTS_FILE = path.join(__dirname, "security_alerts.log");
 
-      // Check for admin login from unknown IP
-      if (username === 'admin' && !knownAdminIps.has(ip)) {
-        const alertMsg = `[${timestamp}] ALERT: Admin login from unknown IP ${ip}!`;
-        alerts.push(alertMsg);
-      }
-    }
+// suspicious patterns
+const suspiciousPatterns = [
+  "failed login",
+  "unauthorized access",
+  "malicious activity detected",
+];
 
-    // Track failed attempts
-    if (status === 'FAILED') {
-      failedAttemptsPerUser[username] = (failedAttemptsPerUser[username] || 0) + 1;
+// scan a log file
+function scanLogFile(logFilePath) {
+  console.log(`\n Scanning log file: ${logFilePath}`);
 
-      // Alert on 3 failed attempts for a user
-      if (failedAttemptsPerUser[username] === 3) {
-        const alertMsg = `[${timestamp}] ALERT: User '${username}' has 3 failed login attempts! Possible account lock!`;
-        alerts.push(alertMsg);
-      }
-    }
-  })
-  .on('end', () => {
-    // Check for abusive IPs (5+ attempts)
-    for (const [ip, attempts] of Object.entries(loginAttemptsPerIp)) {
-      if (attempts >= 5) {
-        const alertMsg = `ALERT: IP address ${ip} has ${attempts} login attempts! Possible brute-force attack!`;
-        alerts.push(alertMsg);
-      }
-    }
+  const alerts = [];
 
-    // ✅ Show alerts
-    console.log('\n--- ALERT MESSAGES ---');
-    if (alerts.length > 0) {
-      alerts.forEach((alert) => console.log(alert));
-    } else {
-      console.log('No alerts triggered.');
-    }
+  fs.createReadStream(logFilePath)
+    .pipe(csv())
+    .on("data", (row) => {
+      const timestamp = row["Timestamp"];
+      const message = row["Message"]?.toLowerCase();
 
-    // ✅ Write alerts to a file
-    const alertLogFile = 'security_alerts.log';
-    fs.writeFile(alertLogFile, alerts.join('\n'), (err) => {
-      if (err) {
-        console.error('Error writing alert log:', err);
+      if (!message) return;
+
+      suspiciousPatterns.forEach((pattern) => {
+        if (message.includes(pattern)) {
+          const alertMsg = `[${timestamp}] ALERT: Suspicious activity detected - "${pattern}"`;
+          alerts.push(alertMsg);
+        }
+      });
+    })
+    .on("end", () => {
+      if (alerts.length > 0) {
+        console.log("\n ALERT MESSAGES ");
+        alerts.forEach((alert) => console.log(alert));
+
+        // Write alerts to file
+        fs.writeFile(ALERTS_FILE, alerts.join("\n"), (err) => {
+          if (err) {
+            console.error("Error writing alert log:", err);
+          } else {
+            console.log(` Alerts saved to '${ALERTS_FILE}'`);
+          }
+        });
       } else {
-        console.log(`\nAlerts have been written to '${alertLogFile}'`);
+        console.log("No suspicious activity detected.");
       }
     });
+}
+
+// scan all log files in the uploads directory
+function scanUploadsDirectory() {
+  fs.readdir(UPLOADS_DIR, (err, files) => {
+    if (err) {
+      console.error("Error reading upload directory:", err);
+      return;
+    }
+
+    const logFiles = files.filter((file) => file.endsWith(".csv"));
+
+    if (logFiles.length === 0) {
+      console.log("No log files found in the upload directory.");
+      return;
+    }
+
+    logFiles.forEach((file) => {
+      const logFilePath = path.join(UPLOADS_DIR, file);
+      scanLogFile(logFilePath);
+    });
   });
+}
+
+//scanning the uploads directory
+scanUploadsDirectory();
