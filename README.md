@@ -6,7 +6,7 @@ Console the output(Alert messages if it detect any suspicious pattern else: succ
 
 # How to run 
 ## for frontend:
-cd frontend 
+cd frontend \n
 npm run dev
 ## for backend:
 nodemon parser.js
