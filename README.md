@@ -16,3 +16,5 @@ or node parser.js
 # Node version 
 v22.14.0
 
+### Note: The output will render on terminal where node is running.
+
